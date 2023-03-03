@@ -71,8 +71,8 @@ func drawModelInstanced(renderPass *wgpu.RenderPassEncoder, model *Model, camera
 	for _, mesh := range model.Meshes {
 		material := model.Materials[mesh.MaterialIdx]
 
-		renderPass.SetVertexBuffer(0, mesh.VertexBuffer, 0, 0)
-		renderPass.SetIndexBuffer(mesh.IndexBuffer, wgpu.IndexFormat_Uint32, 0, 0)
+		renderPass.SetVertexBuffer(0, mesh.VertexBuffer, 0, wgpu.WholeSize)
+		renderPass.SetIndexBuffer(mesh.IndexBuffer, wgpu.IndexFormat_Uint32, 0, wgpu.WholeSize)
 		renderPass.SetBindGroup(0, material.BindGroup, nil)
 		renderPass.SetBindGroup(1, cameraBindGroup, nil)
 		renderPass.DrawIndexed(mesh.NumElements, instanceCount, 0, 0, 0)

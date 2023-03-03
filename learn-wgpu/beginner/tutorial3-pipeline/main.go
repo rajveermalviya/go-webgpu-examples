@@ -24,26 +24,31 @@ type State struct {
 	renderPipeline *wgpu.RenderPipeline
 }
 
-func InitState(window display.Window) (*State, error) {
-	s := &State{}
-
+func InitState(window display.Window) (s *State, err error) {
+	defer func() {
+		if err != nil {
+			s.Destroy()
+			s = nil
+		}
+	}()
+	s = &State{}
 	s.size = window.InnerSize()
 
-	s.surface = wgpu.CreateSurface(getSurfaceDescriptor(window))
+	instance := wgpu.CreateInstance(nil)
 
-	adaper, err := wgpu.RequestAdapter(&wgpu.RequestAdapterOptions{
+	s.surface = instance.CreateSurface(getSurfaceDescriptor(window))
+
+	adaper, err := instance.RequestAdapter(&wgpu.RequestAdapterOptions{
 		CompatibleSurface: s.surface,
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer adaper.Drop()
 
 	s.device, err = adaper.RequestDevice(nil)
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	s.queue = s.device.GetQueue()
 
@@ -56,8 +61,7 @@ func InitState(window display.Window) (*State, error) {
 	}
 	s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	shader, err := s.device.CreateShaderModule(&wgpu.ShaderModuleDescriptor{
@@ -67,8 +71,7 @@ func InitState(window display.Window) (*State, error) {
 		},
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer shader.Drop()
 
@@ -76,8 +79,7 @@ func InitState(window display.Window) (*State, error) {
 		Label: "Render Pipeline Layout",
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer renderPipelineLayout.Drop()
 
@@ -109,8 +111,7 @@ func InitState(window display.Window) (*State, error) {
 		},
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	return s, nil
@@ -122,6 +123,9 @@ func (s *State) Resize(newSize dpi.PhysicalSize[uint32]) {
 		s.config.Width = newSize.Width
 		s.config.Height = newSize.Height
 
+		if s.swapChain != nil {
+			s.swapChain.Drop()
+		}
 		var err error
 		s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
 		if err != nil {
@@ -171,6 +175,7 @@ func (s *State) Destroy() {
 		s.renderPipeline = nil
 	}
 	if s.swapChain != nil {
+		s.swapChain.Drop()
 		s.swapChain = nil
 	}
 	if s.config != nil {

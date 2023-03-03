@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"unsafe"
 
 	"github.com/rajveermalviya/go-webgpu/wgpu"
@@ -40,7 +39,10 @@ const OVERFLOW = 0xffffffff
 func main() {
 	numbers := []uint32{1, 2, 3, 4}
 
-	adapter, err := wgpu.RequestAdapter(&wgpu.RequestAdapterOptions{
+	instance := wgpu.CreateInstance(nil)
+	defer instance.Drop()
+
+	adapter, err := instance.RequestAdapter(&wgpu.RequestAdapterOptions{
 		ForceFallbackAdapter: forceFallbackAdapter,
 	})
 	if err != nil {
@@ -109,6 +111,7 @@ func main() {
 		Entries: []wgpu.BindGroupEntry{{
 			Binding: 0,
 			Buffer:  storageBuffer,
+			Size:    wgpu.WholeSize,
 		}},
 	})
 	if err != nil {
@@ -144,7 +147,7 @@ func main() {
 
 	steps := make([]uint32, len(numbers))
 	{
-		data := stagingBuffer.GetMappedRange(0, size)
+		data := stagingBuffer.GetMappedRange(0, uint(size))
 
 		copy(steps, wgpu.FromBytes[uint32](data))
 
@@ -159,7 +162,7 @@ func main() {
 		return strconv.FormatUint(uint64(e), 10)
 	})
 
-	fmt.Printf("Steps: [%s]\n", strings.Join(dispSteps, ", "))
+	fmt.Printf("Steps: %#v\n", dispSteps)
 }
 
 func mapSlice[E1 any, E2 any](s []E1, f func(e E1) E2) []E2 {

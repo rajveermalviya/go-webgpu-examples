@@ -20,6 +20,7 @@ var shader string
 
 type app struct {
 	window          display.Window
+	instance        *wgpu.Instance
 	adapter         *wgpu.Adapter
 	device          *wgpu.Device
 	surface         *wgpu.Surface
@@ -36,7 +37,9 @@ type app struct {
 func (a *app) init() {
 	var err error
 
-	a.adapter, err = wgpu.RequestAdapter(nil)
+	a.instance = wgpu.CreateInstance(nil)
+
+	a.adapter, err = a.instance.RequestAdapter(nil)
 	if err != nil {
 		panic(err)
 	}
@@ -72,12 +75,16 @@ func (a *app) deinit() {
 		a.adapter.Drop()
 		a.adapter = nil
 	}
+	if a.instance != nil {
+		a.instance.Drop()
+		a.instance = nil
+	}
 }
 
 func (a *app) surfaceInit() {
 	var err error
 
-	a.surface = wgpu.CreateSurface(getSurfaceDescriptor(a.window))
+	a.surface = a.instance.CreateSurface(getSurfaceDescriptor(a.window))
 	if a.surface == nil {
 		panic("got nil surface")
 	}
@@ -138,6 +145,7 @@ func (a *app) surfaceDeinit() {
 	a.hasSurfaceInit = false
 
 	if a.swapChain != nil {
+		a.swapChain.Drop()
 		a.swapChain = nil
 	}
 	if a.config != nil {
@@ -162,6 +170,9 @@ func (a *app) resize(width, height uint32) {
 		a.config.Width = width
 		a.config.Height = height
 
+		if a.swapChain != nil {
+			a.swapChain.Drop()
+		}
 		var err error
 		a.swapChain, err = a.device.CreateSwapChain(a.surface, a.config)
 		if err != nil {

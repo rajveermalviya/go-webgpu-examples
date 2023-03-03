@@ -31,7 +31,7 @@ var VertexBufferLayout = wgpu.VertexBufferLayout{
 			Format:         wgpu.VertexFormat_Float32x3,
 		},
 		{
-			Offset:         uint64(unsafe.Sizeof([3]float32{})),
+			Offset:         wgpu.VertexFormat_Float32x3.Size(),
 			ShaderLocation: 1,
 			Format:         wgpu.VertexFormat_Float32x3,
 		},
@@ -81,40 +81,48 @@ type State struct {
 	useComplex            bool
 }
 
-func InitState(window display.Window) (*State, error) {
-	s := &State{}
+func InitState(window display.Window) (s *State, err error) {
+	defer func() {
+		if err != nil {
+			s.Destroy()
+			s = nil
+		}
+	}()
+	s = &State{}
 
 	s.size = window.InnerSize()
 
-	s.surface = wgpu.CreateSurface(getSurfaceDescriptor(window))
+	instance := wgpu.CreateInstance(nil)
+	defer instance.Drop()
 
-	adaper, err := wgpu.RequestAdapter(&wgpu.RequestAdapterOptions{
+	s.surface = instance.CreateSurface(getSurfaceDescriptor(window))
+
+	adaper, err := instance.RequestAdapter(&wgpu.RequestAdapterOptions{
 		CompatibleSurface: s.surface,
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer adaper.Drop()
 
 	s.device, err = adaper.RequestDevice(nil)
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	s.queue = s.device.GetQueue()
 
+	surfaceCaps := s.surface.GetCapabilities(adaper)
 	s.config = &wgpu.SwapChainDescriptor{
 		Usage:       wgpu.TextureUsage_RenderAttachment,
-		Format:      s.surface.GetPreferredFormat(adaper),
+		Format:      surfaceCaps.Formats[0],
 		Width:       s.size.Width,
 		Height:      s.size.Height,
-		PresentMode: wgpu.PresentMode_Fifo,
+		PresentMode: surfaceCaps.PresentModes[0],
+		AlphaMode:   surfaceCaps.AlphaModes[0],
 	}
 	s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	shader, err := s.device.CreateShaderModule(&wgpu.ShaderModuleDescriptor{
@@ -124,8 +132,7 @@ func InitState(window display.Window) (*State, error) {
 		},
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer shader.Drop()
 
@@ -133,8 +140,7 @@ func InitState(window display.Window) (*State, error) {
 		Label: "Render Pipeline Layout",
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer renderPipelineLayout.Drop()
 
@@ -167,8 +173,7 @@ func InitState(window display.Window) (*State, error) {
 		},
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	s.vertexBuffer, err = s.device.CreateBufferInit(&wgpu.BufferInitDescriptor{
@@ -177,8 +182,7 @@ func InitState(window display.Window) (*State, error) {
 		Usage:    wgpu.BufferUsage_Vertex,
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	s.indexBuffer, err = s.device.CreateBufferInit(&wgpu.BufferInitDescriptor{
@@ -187,12 +191,11 @@ func InitState(window display.Window) (*State, error) {
 		Usage:    wgpu.BufferUsage_Index,
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	s.numIndices = uint32(len(INDICES))
 
-	const numVertices = 16
+	const numVertices = 100
 	angle := math.Pi * 2.0 / float32(numVertices)
 	var challengeVerts [numVertices]Vertex
 	for i := 0; i < numVertices; i++ {
@@ -200,16 +203,8 @@ func InitState(window display.Window) (*State, error) {
 		thetaSin, thetaCos := math.Sincos(float64(theta))
 
 		challengeVerts[i] = Vertex{
-			position: [3]float32{
-				0.5 * float32(thetaCos),
-				-0.5 * float32(thetaSin),
-				0.0,
-			},
-			color: [3]float32{
-				(1.0 + float32(thetaCos)) / 2.0,
-				(1.0 + float32(thetaSin)) / 2.0,
-				1.0,
-			},
+			position: [3]float32{0.5 * float32(thetaCos), -0.5 * float32(thetaSin), 0.0},
+			color:    [3]float32{(1.0 + float32(thetaCos)) / 2.0, (1.0 + float32(thetaSin)) / 2.0, 1.0},
 		}
 	}
 
@@ -231,8 +226,7 @@ func InitState(window display.Window) (*State, error) {
 		Usage:    wgpu.BufferUsage_Vertex,
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	s.challengeIndexBuffer, err = s.device.CreateBufferInit(&wgpu.BufferInitDescriptor{
@@ -241,8 +235,7 @@ func InitState(window display.Window) (*State, error) {
 		Usage:    wgpu.BufferUsage_Index,
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	return s, nil
@@ -254,6 +247,9 @@ func (s *State) Resize(newSize dpi.PhysicalSize[uint32]) {
 		s.config.Width = newSize.Width
 		s.config.Height = newSize.Height
 
+		if s.swapChain != nil {
+			s.swapChain.Drop()
+		}
 		var err error
 		s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
 		if err != nil {
@@ -289,12 +285,12 @@ func (s *State) Render() error {
 	})
 	renderPass.SetPipeline(s.renderPipeline)
 	if s.useComplex {
-		renderPass.SetVertexBuffer(0, s.challengeVertexBuffer, 0, 0)
-		renderPass.SetIndexBuffer(s.challengeIndexBuffer, wgpu.IndexFormat_Uint16, 0, 0)
+		renderPass.SetVertexBuffer(0, s.challengeVertexBuffer, 0, wgpu.WholeSize)
+		renderPass.SetIndexBuffer(s.challengeIndexBuffer, wgpu.IndexFormat_Uint16, 0, wgpu.WholeSize)
 		renderPass.DrawIndexed(s.numChallengeIndices, 1, 0, 0, 0)
 	} else {
-		renderPass.SetVertexBuffer(0, s.vertexBuffer, 0, 0)
-		renderPass.SetIndexBuffer(s.indexBuffer, wgpu.IndexFormat_Uint16, 0, 0)
+		renderPass.SetVertexBuffer(0, s.vertexBuffer, 0, wgpu.WholeSize)
+		renderPass.SetIndexBuffer(s.indexBuffer, wgpu.IndexFormat_Uint16, 0, wgpu.WholeSize)
 		renderPass.DrawIndexed(s.numIndices, 1, 0, 0, 0)
 	}
 	renderPass.End()
@@ -327,6 +323,7 @@ func (s *State) Destroy() {
 		s.renderPipeline = nil
 	}
 	if s.swapChain != nil {
+		s.swapChain.Drop()
 		s.swapChain = nil
 	}
 	if s.config != nil {

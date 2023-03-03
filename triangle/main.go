@@ -38,6 +38,7 @@ func init() {
 var shader string
 
 type State struct {
+	instance  *wgpu.Instance
 	surface   *wgpu.Surface
 	swapChain *wgpu.SwapChain
 	device    *wgpu.Device
@@ -46,25 +47,31 @@ type State struct {
 	pipeline  *wgpu.RenderPipeline
 }
 
-func InitState(window *glfw.Window) (*State, error) {
-	s := &State{}
+func InitState(window *glfw.Window) (s *State, err error) {
+	defer func() {
+		if err != nil {
+			s.Destroy()
+			s = nil
+		}
+	}()
+	s = &State{}
 
-	s.surface = wgpu.CreateSurface(getSurfaceDescriptor(window))
+	s.instance = wgpu.CreateInstance(nil)
 
-	adapter, err := wgpu.RequestAdapter(&wgpu.RequestAdapterOptions{
+	s.surface = s.instance.CreateSurface(getSurfaceDescriptor(window))
+
+	adapter, err := s.instance.RequestAdapter(&wgpu.RequestAdapterOptions{
 		ForceFallbackAdapter: forceFallbackAdapter,
 		CompatibleSurface:    s.surface,
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer adapter.Drop()
 
 	s.device, err = adapter.RequestDevice(nil)
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	s.queue = s.device.GetQueue()
 
@@ -73,8 +80,7 @@ func InitState(window *glfw.Window) (*State, error) {
 		WGSLDescriptor: &wgpu.ShaderModuleWGSLDescriptor{Code: shader},
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 	defer shader.Drop()
 
@@ -88,8 +94,7 @@ func InitState(window *glfw.Window) (*State, error) {
 	}
 	s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	s.pipeline, err = s.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
@@ -122,8 +127,7 @@ func InitState(window *glfw.Window) (*State, error) {
 		},
 	})
 	if err != nil {
-		s.Destroy()
-		return nil, err
+		return s, err
 	}
 
 	return s, nil
@@ -134,6 +138,9 @@ func (s *State) Resize(width, height int) {
 		s.config.Width = uint32(width)
 		s.config.Height = uint32(height)
 
+		if s.swapChain != nil {
+			s.swapChain.Drop()
+		}
 		var err error
 		s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
 		if err != nil {
@@ -183,6 +190,7 @@ func (s *State) Destroy() {
 		s.pipeline = nil
 	}
 	if s.swapChain != nil {
+		s.swapChain.Drop()
 		s.swapChain = nil
 	}
 	if s.config != nil {
@@ -198,6 +206,10 @@ func (s *State) Destroy() {
 	if s.surface != nil {
 		s.surface.Drop()
 		s.surface = nil
+	}
+	if s.instance != nil {
+		s.instance.Drop()
+		s.instance = nil
 	}
 }
 
@@ -223,13 +235,13 @@ func main() {
 	window.SetKeyCallback(func(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
 		// Print resource usage on pressing 'R'
 		if key == glfw.KeyR && (action == glfw.Press || action == glfw.Repeat) {
-			report := wgpu.GenerateReport()
+			report := s.instance.GenerateReport()
 			buf, _ := json.MarshalIndent(report, "", "  ")
 			fmt.Print(string(buf))
 		}
 	})
 
-	window.SetSizeCallback(func(w *glfw.Window, width, height int) {
+	window.SetSizeCallback(func(_ *glfw.Window, width, height int) {
 		s.Resize(width, height)
 	})
 

@@ -39,8 +39,14 @@ func TextureFromPNGBytes(device *wgpu.Device, queue *wgpu.Queue, buf []byte, lab
 	return TextureFromImage(device, queue, img, label)
 }
 
-func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, label string) (*Texture, error) {
-	t := &Texture{}
+func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, label string) (t *Texture, err error) {
+	defer func() {
+		if err != nil {
+			t.Destroy()
+			t = nil
+		}
+	}()
+	t = &Texture{}
 
 	r := img.Bounds()
 	width := r.Dx()
@@ -58,7 +64,6 @@ func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, l
 		Height:             uint32(height),
 		DepthOrArrayLayers: 1,
 	}
-	var err error
 	t.texture, err = device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         label,
 		Size:          size,
@@ -69,7 +74,7 @@ func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, l
 		Usage:         wgpu.TextureUsage_TextureBinding | wgpu.TextureUsage_CopyDst,
 	})
 	if err != nil {
-		return nil, err
+		return t, err
 	}
 
 	queue.WriteTexture(
@@ -98,8 +103,7 @@ func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, l
 		MipmapFilter: wgpu.MipmapFilterMode_Nearest,
 	})
 	if err != nil {
-		t.Destroy()
-		return nil, err
+		return t, err
 	}
 
 	return t, nil
@@ -107,8 +111,14 @@ func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, l
 
 const DepthTextureFormat = wgpu.TextureFormat_Depth32Float
 
-func CreateDepthTexture(device *wgpu.Device, config *wgpu.SwapChainDescriptor, label string) (*Texture, error) {
-	t := &Texture{}
+func CreateDepthTexture(device *wgpu.Device, config *wgpu.SwapChainDescriptor, label string) (t *Texture, err error) {
+	defer func() {
+		if err != nil {
+			t.Destroy()
+			t = nil
+		}
+	}()
+	t = &Texture{}
 
 	size := wgpu.Extent3D{
 		Width:              config.Width,
@@ -116,7 +126,6 @@ func CreateDepthTexture(device *wgpu.Device, config *wgpu.SwapChainDescriptor, l
 		DepthOrArrayLayers: 1,
 	}
 
-	var err error
 	t.texture, err = device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         label,
 		Size:          size,
@@ -127,7 +136,7 @@ func CreateDepthTexture(device *wgpu.Device, config *wgpu.SwapChainDescriptor, l
 		Usage:         wgpu.TextureUsage_RenderAttachment | wgpu.TextureUsage_TextureBinding,
 	})
 	if err != nil {
-		return nil, err
+		return t, err
 	}
 	t.view = t.texture.CreateView(nil)
 	t.sampler, err = device.CreateSampler(&wgpu.SamplerDescriptor{
@@ -138,12 +147,11 @@ func CreateDepthTexture(device *wgpu.Device, config *wgpu.SwapChainDescriptor, l
 		MinFilter:    wgpu.FilterMode_Linear,
 		MipmapFilter: wgpu.MipmapFilterMode_Nearest,
 		Compare:      wgpu.CompareFunction_LessEqual,
-		LodMinClamp:  -100,
+		LodMinClamp:  0,
 		LodMaxClamp:  100,
 	})
 	if err != nil {
-		t.Destroy()
-		return nil, err
+		return t, err
 	}
 
 	return t, nil
