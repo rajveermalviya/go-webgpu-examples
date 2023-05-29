@@ -67,7 +67,7 @@ This example also supports running on android.
 # connect your device and setup adb / run android emulator
 
 # install tsukuru to build apk
-go install github.com/rajveermalviya/tsukuru@latest
+go install github.com/rajveermalviya/tsukuru/cmd/tsukuru@latest
 
 cd examples/gamen-windowing
 tsukuru run apk .
