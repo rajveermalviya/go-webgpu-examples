@@ -19,15 +19,15 @@ type Texture struct {
 
 func (t *Texture) Destroy() {
 	if t.sampler != nil {
-		t.sampler.Drop()
+		t.sampler.Release()
 		t.sampler = nil
 	}
 	if t.view != nil {
-		t.view.Drop()
+		t.view.Release()
 		t.view = nil
 	}
 	if t.texture != nil {
-		t.texture.Drop()
+		t.texture.Release()
 		t.texture = nil
 	}
 }
@@ -85,7 +85,7 @@ func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, l
 		Usage:         wgpu.TextureUsage_TextureBinding | wgpu.TextureUsage_CopyDst,
 	})
 	if err != nil {
-		return t, err
+		return
 	}
 
 	queue.WriteTexture(
@@ -104,17 +104,14 @@ func TextureFromImage(device *wgpu.Device, queue *wgpu.Queue, img image.Image, l
 		&size,
 	)
 
-	t.view = t.texture.CreateView(nil)
-	t.sampler, err = device.CreateSampler(&wgpu.SamplerDescriptor{
-		AddressModeU: wgpu.AddressMode_ClampToEdge,
-		AddressModeV: wgpu.AddressMode_ClampToEdge,
-		AddressModeW: wgpu.AddressMode_ClampToEdge,
-		MagFilter:    wgpu.FilterMode_Linear,
-		MinFilter:    wgpu.FilterMode_Nearest,
-		MipmapFilter: wgpu.MipmapFilterMode_Nearest,
-	})
+	t.view, err = t.texture.CreateView(nil)
 	if err != nil {
-		return t, err
+		return
+	}
+
+	t.sampler, err = device.CreateSampler(nil)
+	if err != nil {
+		return
 	}
 
 	return t, nil
@@ -149,17 +146,23 @@ func CreateDepthTexture(device *wgpu.Device, config *wgpu.SwapChainDescriptor, l
 	if err != nil {
 		return t, err
 	}
-	t.view = t.texture.CreateView(nil)
+
+	t.view, err = t.texture.CreateView(nil)
+	if err != nil {
+		return t, err
+	}
+
 	t.sampler, err = device.CreateSampler(&wgpu.SamplerDescriptor{
-		AddressModeU: wgpu.AddressMode_ClampToEdge,
-		AddressModeV: wgpu.AddressMode_ClampToEdge,
-		AddressModeW: wgpu.AddressMode_ClampToEdge,
-		MagFilter:    wgpu.FilterMode_Linear,
-		MinFilter:    wgpu.FilterMode_Linear,
-		MipmapFilter: wgpu.MipmapFilterMode_Nearest,
-		Compare:      wgpu.CompareFunction_LessEqual,
-		LodMinClamp:  0,
-		LodMaxClamp:  100,
+		AddressModeU:   wgpu.AddressMode_ClampToEdge,
+		AddressModeV:   wgpu.AddressMode_ClampToEdge,
+		AddressModeW:   wgpu.AddressMode_ClampToEdge,
+		MagFilter:      wgpu.FilterMode_Nearest,
+		MinFilter:      wgpu.FilterMode_Nearest,
+		MipmapFilter:   wgpu.MipmapFilterMode_Nearest,
+		Compare:        wgpu.CompareFunction_LessEqual,
+		LodMinClamp:    0,
+		LodMaxClamp:    32,
+		MaxAnisotrophy: 1,
 	})
 	if err != nil {
 		return t, err

@@ -23,6 +23,7 @@ type app struct {
 	instance        *wgpu.Instance
 	adapter         *wgpu.Adapter
 	device          *wgpu.Device
+	queue           *wgpu.Queue
 	surface         *wgpu.Surface
 	shader          *wgpu.ShaderModule
 	pipeline        *wgpu.RenderPipeline
@@ -49,6 +50,8 @@ func (a *app) init() {
 		panic(err)
 	}
 
+	a.queue = a.device.GetQueue()
+
 	a.shader, err = a.device.CreateShaderModule(&wgpu.ShaderModuleDescriptor{
 		Label:          "shader.wgsl",
 		WGSLDescriptor: &wgpu.ShaderModuleWGSLDescriptor{Code: shader},
@@ -64,19 +67,23 @@ func (a *app) deinit() {
 	a.hasInit = false
 
 	if a.shader != nil {
-		a.shader.Drop()
+		a.shader.Release()
 		a.shader = nil
 	}
+	if a.queue != nil {
+		a.queue.Release()
+		a.queue = nil
+	}
 	if a.device != nil {
-		a.device.Drop()
+		a.device.Release()
 		a.device = nil
 	}
 	if a.adapter != nil {
-		a.adapter.Drop()
+		a.adapter.Release()
 		a.adapter = nil
 	}
 	if a.instance != nil {
-		a.instance.Drop()
+		a.instance.Release()
 		a.instance = nil
 	}
 }
@@ -145,18 +152,18 @@ func (a *app) surfaceDeinit() {
 	a.hasSurfaceInit = false
 
 	if a.swapChain != nil {
-		a.swapChain.Drop()
+		a.swapChain.Release()
 		a.swapChain = nil
 	}
 	if a.config != nil {
 		a.config = nil
 	}
 	if a.pipeline != nil {
-		a.pipeline.Drop()
+		a.pipeline.Release()
 		a.pipeline = nil
 	}
 	if a.surface != nil {
-		a.surface.Drop()
+		a.surface.Release()
 		a.surface = nil
 	}
 }
@@ -171,7 +178,7 @@ func (a *app) resize(width, height uint32) {
 		a.config.Height = height
 
 		if a.swapChain != nil {
-			a.swapChain.Drop()
+			a.swapChain.Release()
 		}
 		var err error
 		a.swapChain, err = a.device.CreateSwapChain(a.surface, a.config)
@@ -190,7 +197,7 @@ func (a *app) render() error {
 	if err != nil {
 		return err
 	}
-	defer nextTexture.Drop()
+	defer nextTexture.Release()
 
 	encoder, err := a.device.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{
 		Label: "Command Encoder",
@@ -198,6 +205,7 @@ func (a *app) render() error {
 	if err != nil {
 		return err
 	}
+	defer encoder.Release()
 
 	renderPass := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		ColorAttachments: []wgpu.RenderPassColorAttachment{
@@ -209,19 +217,27 @@ func (a *app) render() error {
 			},
 		},
 	})
+	defer renderPass.Release()
 
 	renderPass.SetPipeline(a.pipeline)
 	renderPass.Draw(3, 1, 0, 0)
 	renderPass.End()
 
-	queue := a.device.GetQueue()
-	queue.Submit(encoder.Finish(nil))
+	cmdBuffer, err := encoder.Finish(nil)
+	if err != nil {
+		return err
+	}
+	defer cmdBuffer.Release()
+
+	a.queue.Submit(cmdBuffer)
 	a.swapChain.Present()
 
 	return nil
 }
 
 func main() {
+	wgpu.SetLogLevel(wgpu.LogLevel_Info)
+
 	d, err := display.NewDisplay()
 	if err != nil {
 		panic(err)
@@ -263,17 +279,13 @@ func main() {
 
 		err := a.render()
 		if err != nil {
-			errstr := err.Error()
-			fmt.Println(errstr)
+			fmt.Println("error occured while rendering:", err)
 
+			errstr := err.Error()
 			switch {
-			case strings.Contains(errstr, "Lost"):
-				size := w.InnerSize()
-				a.resize(size.Width, size.Height)
-			case strings.Contains(errstr, "Outdated"):
-				size := w.InnerSize()
-				a.resize(size.Width, size.Height)
-			case strings.Contains(errstr, "Timeout"):
+			case strings.Contains(errstr, "Surface timed out"): // do nothing
+			case strings.Contains(errstr, "Surface is outdated"): // do nothing
+			case strings.Contains(errstr, "Surface was lost"): // do nothing
 			default:
 				panic(err)
 			}

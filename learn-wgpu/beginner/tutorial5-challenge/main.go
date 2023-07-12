@@ -99,7 +99,7 @@ func InitState(window display.Window) (s *State, err error) {
 	s.size = window.InnerSize()
 
 	instance := wgpu.CreateInstance(nil)
-	defer instance.Drop()
+	defer instance.Release()
 
 	s.surface = instance.CreateSurface(getSurfaceDescriptor(window))
 
@@ -109,7 +109,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer adaper.Drop()
+	defer adaper.Release()
 
 	s.device, err = adaper.RequestDevice(nil)
 	if err != nil {
@@ -153,7 +153,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer textureBindGroupLayout.Drop()
+	defer textureBindGroupLayout.Release()
 
 	s.diffuseTexture, err = TextureFromPNGBytes(s.device, s.queue, happyTreePng, "happy-tree.png")
 	if err != nil {
@@ -210,7 +210,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer shader.Drop()
+	defer shader.Release()
 
 	renderPipelineLayout, err := s.device.CreatePipelineLayout(&wgpu.PipelineLayoutDescriptor{
 		Label: "Render Pipeline Layout",
@@ -221,7 +221,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer renderPipelineLayout.Drop()
+	defer renderPipelineLayout.Release()
 
 	s.renderPipeline, err = s.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
 		Label:  "Render Pipeline",
@@ -284,7 +284,7 @@ func (s *State) Resize(newSize dpi.PhysicalSize[uint32]) {
 		s.config.Height = newSize.Height
 
 		if s.swapChain != nil {
-			s.swapChain.Drop()
+			s.swapChain.Release()
 		}
 		var err error
 		s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
@@ -299,12 +299,13 @@ func (s *State) Render() error {
 	if err != nil {
 		return err
 	}
-	defer view.Drop()
+	defer view.Release()
 
 	encoder, err := s.device.CreateCommandEncoder(nil)
 	if err != nil {
 		return err
 	}
+	defer encoder.Release()
 
 	renderPass := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		ColorAttachments: []wgpu.RenderPassColorAttachment{{
@@ -319,6 +320,8 @@ func (s *State) Render() error {
 			StoreOp: wgpu.StoreOp_Store,
 		}},
 	})
+	defer renderPass.Release()
+
 	renderPass.SetPipeline(s.renderPipeline)
 	if s.isSpacePressed {
 		renderPass.SetBindGroup(0, s.cartoonBindGroup, nil)
@@ -330,7 +333,13 @@ func (s *State) Render() error {
 	renderPass.DrawIndexed(s.numIndices, 1, 0, 0, 0)
 	renderPass.End()
 
-	s.queue.Submit(encoder.Finish(nil))
+	cmdBuffer, err := encoder.Finish(nil)
+	if err != nil {
+		return err
+	}
+	defer cmdBuffer.Release()
+
+	s.queue.Submit(cmdBuffer)
 	s.swapChain.Present()
 
 	return nil
@@ -338,19 +347,19 @@ func (s *State) Render() error {
 
 func (s *State) Destroy() {
 	if s.indexBuffer != nil {
-		s.indexBuffer.Drop()
+		s.indexBuffer.Release()
 		s.indexBuffer = nil
 	}
 	if s.vertexBuffer != nil {
-		s.vertexBuffer.Drop()
+		s.vertexBuffer.Release()
 		s.vertexBuffer = nil
 	}
 	if s.renderPipeline != nil {
-		s.renderPipeline.Drop()
+		s.renderPipeline.Release()
 		s.renderPipeline = nil
 	}
 	if s.cartoonBindGroup != nil {
-		s.cartoonBindGroup.Drop()
+		s.cartoonBindGroup.Release()
 		s.cartoonBindGroup = nil
 	}
 	if s.cartoonTexture != nil {
@@ -358,7 +367,7 @@ func (s *State) Destroy() {
 		s.cartoonTexture = nil
 	}
 	if s.diffuseBindGroup != nil {
-		s.diffuseBindGroup.Drop()
+		s.diffuseBindGroup.Release()
 		s.diffuseBindGroup = nil
 	}
 	if s.diffuseTexture != nil {
@@ -366,21 +375,22 @@ func (s *State) Destroy() {
 		s.diffuseTexture = nil
 	}
 	if s.swapChain != nil {
-		s.swapChain.Drop()
+		s.swapChain.Release()
 		s.swapChain = nil
 	}
 	if s.config != nil {
 		s.config = nil
 	}
 	if s.queue != nil {
+		s.queue.Release()
 		s.queue = nil
 	}
 	if s.device != nil {
-		s.device.Drop()
+		s.device.Release()
 		s.device = nil
 	}
 	if s.surface != nil {
-		s.surface.Drop()
+		s.surface.Release()
 		s.surface = nil
 	}
 }
@@ -428,15 +438,13 @@ func main() {
 
 		err := s.Render()
 		if err != nil {
-			errstr := err.Error()
-			fmt.Println(errstr)
+			fmt.Println("error occured while rendering:", err)
 
+			errstr := err.Error()
 			switch {
-			case strings.Contains(errstr, "Lost"):
-				s.Resize(s.size)
-			case strings.Contains(errstr, "Outdated"):
-				s.Resize(s.size)
-			case strings.Contains(errstr, "Timeout"):
+			case strings.Contains(errstr, "Surface timed out"): // do nothing
+			case strings.Contains(errstr, "Surface is outdated"): // do nothing
+			case strings.Contains(errstr, "Surface was lost"): // do nothing
 			default:
 				panic(err)
 			}

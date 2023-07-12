@@ -314,7 +314,7 @@ func NewDepthPass(device *wgpu.Device, config *wgpu.SwapChainDescriptor) (*Depth
 		depthPass.Destroy()
 		return nil, err
 	}
-	defer pipelineLayout.Drop()
+	defer pipelineLayout.Release()
 
 	shader, err := device.CreateShaderModule(&wgpu.ShaderModuleDescriptor{
 		Label: "ShadowDisplayShader",
@@ -326,7 +326,7 @@ func NewDepthPass(device *wgpu.Device, config *wgpu.SwapChainDescriptor) (*Depth
 		depthPass.Destroy()
 		return nil, err
 	}
-	defer shader.Drop()
+	defer shader.Release()
 
 	depthPass.renderPipeline, err = device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
 		Label:  "DepthPassRenderPipeline",
@@ -373,7 +373,7 @@ func (depthPass *DepthPass) Resize(device *wgpu.Device, config *wgpu.SwapChainDe
 		panic(err)
 	}
 
-	depthPass.bindGroup.Drop()
+	depthPass.bindGroup.Release()
 	depthPass.bindGroup = nil
 	depthPass.bindGroup, err = device.CreateBindGroup(&wgpu.BindGroupDescriptor{
 		Label:  "DepthPassBindGroup",
@@ -403,6 +403,8 @@ func (depthPass *DepthPass) Render(view *wgpu.TextureView, encoder *wgpu.Command
 			StoreOp: wgpu.StoreOp_Store,
 		}},
 	})
+	defer renderPass.Release()
+
 	renderPass.SetPipeline(depthPass.renderPipeline)
 	renderPass.SetBindGroup(0, depthPass.bindGroup, nil)
 	renderPass.SetVertexBuffer(0, depthPass.vertexBuffer, 0, wgpu.WholeSize)
@@ -413,23 +415,23 @@ func (depthPass *DepthPass) Render(view *wgpu.TextureView, encoder *wgpu.Command
 
 func (depthPass *DepthPass) Destroy() {
 	if depthPass.renderPipeline != nil {
-		depthPass.renderPipeline.Drop()
+		depthPass.renderPipeline.Release()
 		depthPass.renderPipeline = nil
 	}
 	if depthPass.indexBuffer != nil {
-		depthPass.indexBuffer.Drop()
+		depthPass.indexBuffer.Release()
 		depthPass.indexBuffer = nil
 	}
 	if depthPass.vertexBuffer != nil {
-		depthPass.vertexBuffer.Drop()
+		depthPass.vertexBuffer.Release()
 		depthPass.vertexBuffer = nil
 	}
 	if depthPass.bindGroup != nil {
-		depthPass.bindGroup.Drop()
+		depthPass.bindGroup.Release()
 		depthPass.bindGroup = nil
 	}
 	if depthPass.layout != nil {
-		depthPass.layout.Drop()
+		depthPass.layout.Release()
 		depthPass.layout = nil
 	}
 	if depthPass.texture != nil {
@@ -474,7 +476,7 @@ func InitState(window display.Window) (s *State, err error) {
 	s.size = window.InnerSize()
 
 	instance := wgpu.CreateInstance(nil)
-	defer instance.Drop()
+	defer instance.Release()
 
 	s.surface = instance.CreateSurface(getSurfaceDescriptor(window))
 
@@ -484,7 +486,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer adaper.Drop()
+	defer adaper.Release()
 
 	s.device, err = adaper.RequestDevice(nil)
 	if err != nil {
@@ -533,7 +535,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer textureBindGroupLayout.Drop()
+	defer textureBindGroupLayout.Release()
 
 	s.diffuseBindGroup, err = s.device.CreateBindGroup(&wgpu.BindGroupDescriptor{
 		Layout: textureBindGroupLayout,
@@ -619,14 +621,13 @@ func InitState(window display.Window) (s *State, err error) {
 			Buffer: wgpu.BufferBindingLayout{
 				Type:             wgpu.BufferBindingType_Uniform,
 				HasDynamicOffset: false,
-				MinBindingSize:   wgpu.WholeSize,
 			},
 		}},
 	})
 	if err != nil {
 		return s, err
 	}
-	defer cameraBindGroupLayout.Drop()
+	defer cameraBindGroupLayout.Release()
 
 	s.cameraBindGroup, err = s.device.CreateBindGroup(&wgpu.BindGroupDescriptor{
 		Label:  "CameraBindGroup",
@@ -650,7 +651,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer shader.Drop()
+	defer shader.Release()
 
 	renderPipelineLayout, err := s.device.CreatePipelineLayout(&wgpu.PipelineLayoutDescriptor{
 		Label: "Render Pipeline Layout",
@@ -661,7 +662,7 @@ func InitState(window display.Window) (s *State, err error) {
 	if err != nil {
 		return s, err
 	}
-	defer renderPipelineLayout.Drop()
+	defer renderPipelineLayout.Release()
 
 	s.renderPipeline, err = s.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
 		Label:  "Render Pipeline",
@@ -749,7 +750,7 @@ func (s *State) Resize(newSize dpi.PhysicalSize[uint32]) {
 		s.config.Height = newSize.Height
 
 		if s.swapChain != nil {
-			s.swapChain.Drop()
+			s.swapChain.Release()
 		}
 		var err error
 		s.swapChain, err = s.device.CreateSwapChain(s.surface, s.config)
@@ -768,12 +769,13 @@ func (s *State) Render() error {
 	if err != nil {
 		return err
 	}
-	defer view.Drop()
+	defer view.Release()
 
 	encoder, err := s.device.CreateCommandEncoder(nil)
 	if err != nil {
 		return err
 	}
+	defer encoder.Release()
 
 	renderPass := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		ColorAttachments: []wgpu.RenderPassColorAttachment{{
@@ -799,6 +801,8 @@ func (s *State) Render() error {
 			StencilReadOnly:   true,
 		},
 	})
+	defer renderPass.Release()
+
 	renderPass.SetPipeline(s.renderPipeline)
 	renderPass.SetBindGroup(0, s.diffuseBindGroup, nil)
 	renderPass.SetBindGroup(1, s.cameraBindGroup, nil)
@@ -810,7 +814,13 @@ func (s *State) Render() error {
 
 	s.depthPass.Render(view, encoder)
 
-	s.queue.Submit(encoder.Finish(nil))
+	cmdBuffer, err := encoder.Finish(nil)
+	if err != nil {
+		return err
+	}
+	defer cmdBuffer.Release()
+
+	s.queue.Submit(cmdBuffer)
 	s.swapChain.Present()
 
 	return nil
@@ -822,27 +832,27 @@ func (s *State) Destroy() {
 		s.depthPass = nil
 	}
 	if s.indexBuffer != nil {
-		s.indexBuffer.Drop()
+		s.indexBuffer.Release()
 		s.indexBuffer = nil
 	}
 	if s.vertexBuffer != nil {
-		s.vertexBuffer.Drop()
+		s.vertexBuffer.Release()
 		s.vertexBuffer = nil
 	}
 	if s.renderPipeline != nil {
-		s.renderPipeline.Drop()
+		s.renderPipeline.Release()
 		s.renderPipeline = nil
 	}
 	if s.cameraBindGroup != nil {
-		s.cameraBindGroup.Drop()
+		s.cameraBindGroup.Release()
 		s.cameraBindGroup = nil
 	}
 	if s.instanceBuffer != nil {
-		s.instanceBuffer.Drop()
+		s.instanceBuffer.Release()
 		s.instanceBuffer = nil
 	}
 	if s.cameraBuffer != nil {
-		s.cameraBuffer.Drop()
+		s.cameraBuffer.Release()
 		s.cameraBuffer = nil
 	}
 	if s.cameraUniform != nil {
@@ -855,7 +865,7 @@ func (s *State) Destroy() {
 		s.camera = nil
 	}
 	if s.diffuseBindGroup != nil {
-		s.diffuseBindGroup.Drop()
+		s.diffuseBindGroup.Release()
 		s.diffuseBindGroup = nil
 	}
 	if s.diffuseTexture != nil {
@@ -863,21 +873,22 @@ func (s *State) Destroy() {
 		s.diffuseTexture = nil
 	}
 	if s.swapChain != nil {
-		s.swapChain.Drop()
+		s.swapChain.Release()
 		s.swapChain = nil
 	}
 	if s.config != nil {
 		s.config = nil
 	}
 	if s.queue != nil {
+		s.queue.Release()
 		s.queue = nil
 	}
 	if s.device != nil {
-		s.device.Drop()
+		s.device.Release()
 		s.device = nil
 	}
 	if s.surface != nil {
-		s.surface.Drop()
+		s.surface.Release()
 		s.surface = nil
 	}
 }
@@ -935,15 +946,13 @@ func main() {
 		s.Update()
 		err := s.Render()
 		if err != nil {
-			errstr := err.Error()
-			fmt.Println(errstr)
+			fmt.Println("error occured while rendering:", err)
 
+			errstr := err.Error()
 			switch {
-			case strings.Contains(errstr, "Lost"):
-				s.Resize(s.size)
-			case strings.Contains(errstr, "Outdated"):
-				s.Resize(s.size)
-			case strings.Contains(errstr, "Timeout"):
+			case strings.Contains(errstr, "Surface timed out"): // do nothing
+			case strings.Contains(errstr, "Surface is outdated"): // do nothing
+			case strings.Contains(errstr, "Surface was lost"): // do nothing
 			default:
 				panic(err)
 			}

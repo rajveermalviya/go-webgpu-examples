@@ -2,9 +2,9 @@ github.com/go-gl/glfw/v3.3/glfw v0.0.0-20221017161538-93cebf72946b h1:GgabKamyOY
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20221017161538-93cebf72946b/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/rajveermalviya/gamen v0.1.1 h1:LFGD73jjbVeGuSJf/qjfaNtPmaX4qtmFeBSt44XlaGc=
 github.com/rajveermalviya/gamen v0.1.1/go.mod h1:EWKU/nBQlikyrSnQY7zREgt4OgcksiYwEyuS063Ru88=
-github.com/rajveermalviya/go-webgpu/wgpu v0.15.1 h1:7GZvcgVrTqIQ6He8ZsOH8rtfUfGKgOWEn1uRjtqSh2M=
-github.com/rajveermalviya/go-webgpu/wgpu v0.15.1/go.mod h1:fr08XXRX3QNhQW6ylg9ihJl3NXFU0oMuqOglGpSgSJo=
-golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2 h1:Jvc7gsqn21cJHCmAWx0LiimpP18LZmUxkT5Mp7EZ1mI=
-golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
+github.com/rajveermalviya/go-webgpu/wgpu v0.16.1 h1:pn4rDJmiR3+3rQiFRrkfEu7jOfRcjswjMxrttyv3fTo=
+github.com/rajveermalviya/go-webgpu/wgpu v0.16.1/go.mod h1:fr08XXRX3QNhQW6ylg9ihJl3NXFU0oMuqOglGpSgSJo=
+golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb h1:xIApU0ow1zwMa2uL1VDNeQlNVFTWMQxZUZCMDy0Q4Us=
+golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb/go.mod h1:FXUEEKJgO7OQYeo8N01OfiKP8RXMtf6e8aTskBGqWdc=
 golang.org/x/sys v0.1.0 h1:kunALQeHf1/185U1i0GOB/fy1IPRDDpuoOOqRReG57U=
 golang.org/x/sys v0.1.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=

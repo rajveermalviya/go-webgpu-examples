@@ -55,14 +55,14 @@ type Model struct {
 
 func (m *Model) Destroy() {
 	for _, mesh := range m.Meshes {
-		mesh.VertexBuffer.Drop()
-		mesh.IndexBuffer.Drop()
+		mesh.VertexBuffer.Release()
+		mesh.IndexBuffer.Release()
 	}
 	m.Meshes = nil
 
 	for _, mtl := range m.Materials {
 		mtl.DiffuseTexture.Destroy()
-		mtl.BindGroup.Drop()
+		mtl.BindGroup.Release()
 	}
 	m.Materials = nil
 }
